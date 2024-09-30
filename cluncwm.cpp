@@ -237,35 +237,27 @@ void handleKeyPress(XKeyEvent* event) {
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_C) && event->state == (MODKEY | ShiftMask) && focusedWindow != None) {
         closeWindow(focusedWindow);
-        std::cout << "pressed mod+shift+C" << std::endl;
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_S) && event->state == MODKEY) {
         identifyPlaace(1, focusedWindow);
-        std::cout << "pressed mod+S" << std::endl;
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_E) && event->state == MODKEY) {
         identifyPlaace(2, focusedWindow);
-        std::cout << "pressed mod+E" << std::endl;
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_C) && event->state == MODKEY) {
         identifyPlaace(3, focusedWindow);
-        std::cout << "pressed mod+C" << std::endl;
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_Z) && event->state == MODKEY) {
         identifyPlaace(4, focusedWindow);
-        std::cout << "pressed mod+Z" << std::endl;
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_Q) && event->state == MODKEY) {
         identifyPlaace(5, focusedWindow);
-        std::cout << "pressed mod+Q" << std::endl;
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_1) && event->state == MODKEY) {
         changedesktop(1);
-        std::cout << "changed desktop to 1" << std::endl;
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_2) && event->state == MODKEY) {
         changedesktop(2);
-        std::cout << "changed desktop to 2" << std::endl;
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_3) && event->state == MODKEY) {
         changedesktop(3);
@@ -287,10 +279,7 @@ void handleKeyPress(XKeyEvent* event) {
     }
 }
 
-
-
 void identifyPlaace(int pos, Window window){
-    std::cout << "Entered identifyPlaace" << std::endl;
     XWindowAttributes windowAttrs;
     XGetWindowAttributes(display, window, &windowAttrs);
     int gap = 8;
@@ -331,7 +320,6 @@ void identifyPlaace(int pos, Window window){
             break;
     }
     XMoveResizeWindow(display, window, winnewx, winnewy, windimw, windimh);
-    std::cout << "window moved to " << winnewx << "x " << winnewy << "y" << std::endl;
     Node* node = windows.find(window);
         if (node) {
             node->x = winnewx;
@@ -342,7 +330,6 @@ void identifyPlaace(int pos, Window window){
 
 // Move all windows offscreen without updating their positions in the linked list
 void moveWindowsOffscreen(LinkedList& desktop) {
-    std::cout << "Entered  moveWindowsOffscreen" << std::endl;
     Node* current = desktop.getHead();
     while (current) {
         // Store the original position of the window
@@ -352,8 +339,6 @@ void moveWindowsOffscreen(LinkedList& desktop) {
         // Move the window offscreen
         XMoveWindow(display, current->win, originalX, -1000);
 
-        std::cout << "current x:" << current->x << " current y:" << current->y << std::endl;
-        std::cout << current << std::endl;
 
         current->x = originalX;
         current->y = originalY;
@@ -363,14 +348,10 @@ void moveWindowsOffscreen(LinkedList& desktop) {
 
         current = current->next;
     }
-
-    std::cout << "success in removing windows from current desktop" << std::endl;
 }
-
 
 // Restore all windows to their original positions using the linked list
 void restoreWindowsToPosition(LinkedList& desktop) {
-    std::cout << "Entered restoreWindowsToPosition" << std::endl;
     Node* current = desktop.getHead();
     while (current) {
         // Restore the window to its original position
@@ -395,12 +376,10 @@ void restoreWindowsToPosition(LinkedList& desktop) {
     }
     */
 
-    std::cout << "success in remapping windows to current desktop" << std::endl;
   
 }
 
 int quereydesktop(int currentdesk, int desktoswitch){
-    std::cout << "Entered quereydesktop" << std::endl;
     //save the desktop to the current desktop
     switch(currentdesk) {
         case 1:
@@ -458,15 +437,11 @@ int quereydesktop(int currentdesk, int desktoswitch){
             break;
     }
 
-
-    std::cout << "success in reassigning linked list" << std::endl;
-
     return desktoswitch;
 
 }
 
 void changedesktop(int desknum) {
-    std::cout << "Entered changedesktop" << std::endl;
     // Move all windows of the current desktop offscreen
     moveWindowsOffscreen(windows);
 
@@ -498,14 +473,11 @@ void changedesktop(int desknum) {
             break;
     }
     usleep(16000); // wait for stability
-    std::cout << "success moved and reassigned linked list windows" << std::endl;
-
     // Restore windows for the newly selected desktop
     restoreWindowsToPosition(windows);
 }
 
 void handleButtonPress(XButtonEvent* event) {
-    std::cout << "Entered handleButtonPress" << std::endl;
     Window window = event->subwindow;
     if (window == None) return;
 
@@ -540,7 +512,6 @@ void handleButtonPress(XButtonEvent* event) {
 }
 
 void handleButtonRelease(XButtonEvent* event) {
-    std::cout << "Entered handleButtonRelease" << std::endl;
     if (event->button == Button1 && draggingWindow != None) {
         // Stop dragging when the left mouse button is released
         draggingWindow = None;
@@ -552,7 +523,6 @@ void handleButtonRelease(XButtonEvent* event) {
 }
 
 void handleMotionNotify(XMotionEvent* event) {
-    std::cout << "Entered handleMotionNotify" << std::endl;
     if (draggingWindow != None) {
         // Calculate how much the mouse has moved since dragging started
         int deltaX = event->x_root - dragStartX;
@@ -581,7 +551,6 @@ void handleMotionNotify(XMotionEvent* event) {
 }
 
 void handleMapRequest(XMapRequestEvent* event) {
-    std::cout << "entered handleMapRequest" << std::endl;
     XMoveResizeWindow(display, event->window, 
                       (DISPLAY_WIDTH - TERMINAL_WIDTH) / 2, 
                       (DISPLAY_HEIGHT - TERMINAL_HEIGHT) / 2, 
@@ -594,38 +563,24 @@ void handleMapRequest(XMapRequestEvent* event) {
 }
 
 void handleConfigureRequest(XConfigureRequestEvent* event) {
-    std::cout << "entered hendleConfigureRequest" << std::endl;
     XWindowChanges changes;
-    std::cout << "mad changes below" << std::endl;
     changes.x = event->x;
-    std::cout << "changes.x called for x parameter from server" << std::endl;
     changes.y = event->y;
-    std::cout << "changes.y called for y parameter from server" << std::endl;
     changes.width = event->width;
-    std::cout << "changes.width called for width from server" << std::endl;
     changes.height = event->height;
-    std::cout << "changes.height called for height  from server" << std::endl;
     changes.border_width = event->border_width;
-    std::cout << "border width requested from server" << std::endl;
     changes.sibling = event->above;
-    std::cout << "siblings requested from server" << std::endl;
     changes.stack_mode = event->detail;
-    std::cout << "stackmode requested from server" << std::endl;
     XConfigureWindow(display, event->window, event->value_mask, &changes);
-    std::cout << "configured window using XConfigureWindow" << std::endl;
 }
 
 void focusWindow(Window window) {
-    std::cout << "Entered focusWindow" << std::endl;
     XRaiseWindow(display, window);
-    std::cout << "raised window" << std::endl;
     focusedWindow = window;
     XSetInputFocus(display, focusedWindow, RevertToPointerRoot, CurrentTime);
-    std::cout << "server called for XsetInputFocus" << std::endl;
 }
 
 void closeWindow(Window window) {
-    std::cout << "entered closeWindow" << std::endl;
     XEvent event;
     event.xclient.type = ClientMessage;
     event.xclient.window = window;
@@ -646,7 +601,6 @@ void closeWindow(Window window) {
     } else {
         focusedWindow = None;  // No windows left to focus
     }
-    std::cout << "success in killling focused window" << std::endl;
 }
 
 void handleDestroyRequest(XDestroyWindowEvent* event){
@@ -657,8 +611,6 @@ void handleDestroyRequest(XDestroyWindowEvent* event){
     }
 
 }
-
-
 
 void spawn(void* argz) {
     std::cout << "entered spawn" << std::endl;
