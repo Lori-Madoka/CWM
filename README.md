@@ -1,5 +1,6 @@
 # CWM
 CLUNC-Window-Manager
+supports: X11, devices with at least 160KB of free memory
 
 # Current Status
 ~~mostly fucntional but not recommended, I need to optimise the calls to the x server to prevent overload and crash~~
