@@ -3,6 +3,7 @@ CLUNC-Window-Manager
 
 # Current Status
 ~~mostly fucntional but not recommended, I need to optimise the calls to the x server to prevent overload and crash~~
+
 mostly funnctional and I would reccomend if you want something tiny that can run in very little ram, fixed the issue with crashing upon applications automatically killing windows
 
 # Guide
