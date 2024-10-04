@@ -16,5 +16,10 @@ mostly funnctional and I would reccomend if you want something tiny that can run
 ### Modkey+leftclick = focus/drag window
 ### Modkey+rightclick = focus/resize window
 
+# Testimp
+testimp.cpp includes  features I am yet to perfect and may be unstable, hence use at your own risk. 
+It will be receiveing most of the updates before the main cluncwm.cpp
+
+
 
 
