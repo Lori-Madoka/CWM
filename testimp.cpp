@@ -190,7 +190,7 @@ void setup() {
 
 void setCursor() {
     Cursor cursor;
-    cursor = XCreateFontCursor(display, XC_left_ptr);
+    cursor = XCreateFontCursor(display, 142);
     XDefineCursor(display, root, cursor);
     XFlush(display);
 }
@@ -408,14 +408,12 @@ void restoreWindowsToPosition(LinkedList& desktop) {
 
         // Optionally flush the X server to ensure the move happens immediately
         //XFlush(display);
+        if (current != NULL){
+    	    focusWindow(current->win);
+        }
 
         current = current->next;
     }
-    /*
-    if (current != NULL){
-    	focusWindow(current->win);
-    }
-    */
 
     std::cout << "success in remapping windows to current desktop" << std::endl;
   
@@ -679,8 +677,6 @@ void handleDestroyRequest(XDestroyWindowEvent* event){
     }
 
 }
-
-
 
 void spawn(void* argz) {
     std::cout << "entered spawn" << std::endl;
