@@ -280,7 +280,15 @@ void handleKeyPress(XKeyEvent* event) {
 }
 
 void identifyPlaace(int pos, Window window){
+	if (!window || window == None){
+    	std::cout << "uh oh no let None window get manipulated cause otherwise crash" << std::endl;
+        return;
+	}
     XWindowAttributes windowAttrs;
+	if (!XGetWindowAttributes(display, window, &windowAttrs)){
+    	std::cout << "also big bad check for windowatttributes failed abysmally" << std::endl;
+    	return;
+	}
     XGetWindowAttributes(display, window, &windowAttrs);
     int gap = 8;
     int windimw, windimh, winnewx, winnewy;
