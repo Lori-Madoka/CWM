@@ -375,14 +375,11 @@ void restoreWindowsToPosition(LinkedList& desktop) {
 
         // Optionally flush the X server to ensure the move happens immediately
         //XFlush(display);
-
+		if (current != NULL){
+    	    focusWindow(current->win);
+        }
         current = current->next;
     }
-    /*
-    if (current != NULL){
-    	focusWindow(current->win);
-    }
-    */
 
   
 }
