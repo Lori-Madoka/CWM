@@ -11,10 +11,16 @@ mostly funnctional and I would reccomend if you want something tiny that can run
 ## Window manager designed on the cluncpad for the cluncpad and other systems
 ## Keybinds:
 ### Modkey+T = open terminal window
-### Modkey+Shift+C = close focused window
+### Modkey+L = switch mode (floating or tiling)
+### Modkey+F = make the focussed window the dom window in tiling mode
 ### Modkey+numbers = change to numbered desktop
 ### Modkey+leftclick = focus/drag window
 ### Modkey+rightclick = focus/resize window
+### Modkey+(q, a, z, e, c) = quick move window to corner/side of screen 
+### Modkey+Shift+C = close focused window
+### Modkey+Shift+I = reinitialise config values
+
+config file will be auto generated for you if you lose it, but you will have to set which values you want to be existant. format is pretty straightforward.
 
 # Testimp
 testimp.cpp includes  features I am yet to perfect and may be unstable, hence use at your own risk. 
