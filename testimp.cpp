@@ -472,7 +472,7 @@ void handleKeyPress(XKeyEvent* event) {
   	        std::cerr << "Mod+F pressed but no window is focused." << std::endl;
   	    }
     }
-    else if (event->keycode == XKeysymToKeycode(display, XK_C) && event->state == (MODKEY | ShiftMask) && focusedWindow != None) {
+    else if (event->keycode == XKeysymToKeycode(display, XK_I) && event->state == (MODKEY | ShiftMask) && focusedWindow != None) {
 		config();
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_1) && event->state == MODKEY) {
