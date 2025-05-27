@@ -6,15 +6,18 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <fstream>
 #include <unistd.h>
 #include <cmath>
+#include <string>
 
 #define MODKEY Mod4Mask // Super key (Windows key)
-#define TERMINAL "kitty"
-#define TERMINAL_WIDTH 600
-#define TERMINAL_HEIGHT 450
-#define DISPLAY_WIDTH 1366
-#define DISPLAY_HEIGHT 768
+int TERMINAL_WIDTH = 600;
+int TERMINAL_HEIGHT = 450;
+
+char* TERMINAL = nullptr;
+int DISPLAY_WIDTH = 1366;
+int DISPLAY_HEIGHT = 768;
 
 Display* display;
 Window root;
@@ -34,6 +37,7 @@ struct layout {
 };
 
 void setup();
+void config();
 void run();
 void handleEvent(XEvent* event);
 void handleKeyPress(XKeyEvent* event);
@@ -54,6 +58,9 @@ layout getposition(int n_windows);
 int getnumberofwindows();
 void spawn(void* argz);
 void setCursor();
+std::string trim(const std::string& s);
+std::string grabconfigtext(const std::string& line);
+int grabconfigval(const std::string& line);
 
 // Node class to represent each element in the linked list
 class Node {
@@ -224,6 +231,7 @@ int main() {
         std::cerr << "Cannot open display\n";
         return 1;
     }
+	config();
     windows = desktop1;
     desktop1 = windows;
     
@@ -235,6 +243,99 @@ int main() {
     XCloseDisplay(display);
     return 0;
 }
+
+std::string trim(const std::string& s) {
+    auto start = s.find_first_not_of(" \t\r\n");
+    auto end = s.find_last_not_of(" \t\r\n");
+    return (start == std::string::npos) ? "" : s.substr(start, end - start + 1);
+}
+
+std::string grabconfigtext(const std::string& line) {
+    auto pos = line.find('=');
+    return (pos != std::string::npos) ? line.substr(pos + 1) : "";
+}
+
+int grabconfigval(const std::string& line) {
+    auto pos = line.find('=');
+    if (pos != std::string::npos) {
+        try {
+            return std::stoi(line.substr(pos + 1));
+        } catch (...) {
+            std::cerr << "Error parsing integer from line: " << line << std::endl;
+        }
+    }
+    return 0;
+}
+
+void config() {
+	std::cout << get_current_dir_name() << std::endl;
+    std::ifstream inputFile("cluncconfig.txt");
+    if (!inputFile) {
+        //create default config if its missing
+        std::cerr << "Unable to open cluncconfig.txt. Creating default config.\n";
+        std::ofstream configFile("cluncconfig.txt");
+        if (configFile.is_open()) {
+            configFile << "terminal=kitty\n";
+            configFile << "terminal_width=400\n";
+            configFile << "terminal_height=300\n";
+            configFile << "window_width=1366\n";
+            configFile << "window_height=768\n";
+            configFile.close();
+        } else {
+            std::cerr << "Unable to write default config.\n";
+            return;
+        }
+        //reopen for reading
+        inputFile.open("cluncconfig.txt");
+        if (!inputFile) {
+            std::cerr << "Still unable to open config.txt after writing.\n";
+            return;
+        }
+    }
+
+    std::string line;
+    int currentline = 0;
+
+    while (std::getline(inputFile, line)) {
+        switch (currentline) {
+            case 0:
+                if (TERMINAL) free(TERMINAL);  //avoid memory leak but its inevitable anyway
+                TERMINAL = strdup(grabconfigtext(line).c_str());
+                std::cout << "received TERMINAL = " << TERMINAL << std::endl;
+                break;
+            case 1:
+                TERMINAL_WIDTH = grabconfigval(line);
+                std::cout << "received TERMINAL_WIDTH = " << TERMINAL_WIDTH << std::endl;
+                break;
+            case 2:
+                TERMINAL_HEIGHT = grabconfigval(line);
+                std::cout << "received TERMINLALHEIGHT = " << TERMINAL_HEIGHT <<std::endl;
+                break;
+            case 3:
+                DISPLAY_WIDTH = grabconfigval(line);
+                std::cout << "receiverd DISPLAY_WIDTH = " << DISPLAY_WIDTH << std::endl;
+                break;
+            case 4:
+                DISPLAY_HEIGHT = grabconfigval(line);
+                std::cout << "receiverd DISPLAY_HEIGHT = " << DISPLAY_HEIGHT << std::endl;
+                break;
+            default:
+                //prevent people doing sillies and trying to run arbritary code but thats possible by abusing terminal ig
+                break;
+        }
+        currentline++;
+    }
+
+    inputFile.close();
+    // Debug print
+    std::cout << "Loaded config:\n";
+    std::cout << "TERMINAL=" << TERMINAL << "\n";
+    std::cout << "TERMINAL_WIDTH=" << TERMINAL_WIDTH << "\n";
+    std::cout << "TERMINAL_HEIGHT=" << TERMINAL_HEIGHT << "\n";
+    std::cout << "DISPLAY_WIDTH=" << DISPLAY_WIDTH << "\n";
+    std::cout << "DISPLAY_HEIGHT=" << DISPLAY_HEIGHT << "\n";
+}
+
 
 void setup() {
     XSelectInput(display, root, SubstructureRedirectMask | SubstructureNotifyMask | ButtonPressMask | PointerMotionMask);
@@ -406,7 +507,7 @@ void switchmode() {
 	else mode=0;
 }
 
-layout getposition(int n_windows) {
+layout getposition(int n_windows, bool usedOddSlot) {
 	layout structure;
 	int factor = 100*n_windows; //unneccesarily high start number to make sure one factor is found at least
 	int testfactor = 1;
@@ -418,8 +519,14 @@ layout getposition(int n_windows) {
 	  }
 	  testfactor++;
 	}
-	structure.colms=n_windows/factor; //assign the numbers to be sent back, put this in whatever order u want
-	structure.rows=factor;
+	if (n_windows+1==3 && usedOddSlot==true) {
+		structure.rows=n_windows/factor; //assign the numbers to be sent back, put this in whatever order u want
+		structure.colms=factor;
+	}
+	else {	
+		structure.colms=n_windows/factor; //assign the numbers to be sent back, put this in whatever order u want
+		structure.rows=factor;
+	}
 	return structure;
 }
 
@@ -445,7 +552,7 @@ void tiling() { //in here we tile brilliantly and intuitively
 		return;
 	}
 	else if (n_windows%2!=0) { //if there is odd number handle the dom window here
-		xsize=std::min(width * 0.4, width / double(n_windows - 1)); //dom window musnt take over 40% of screen
+		xsize=std::min(width * 0.6, width / double(n_windows - 1)); //dom window musnt take over 40% of screen
 		usedOddSlot = true;
 		remainwidth=width-xsize;
 		n_windows--;
@@ -454,7 +561,7 @@ void tiling() { //in here we tile brilliantly and intuitively
 		XMoveResizeWindow(display, mover->win, gap_outer, gap_outer, xsize-(2*gap_outer), DISPLAY_HEIGHT-(2*gap_outer));
 		mover=mover->next;
 	}
-	structure=getposition(n_windows);
+	structure=getposition(n_windows, usedOddSlot);
 	int totalgap_x=gap_inner*(structure.colms - 1)+gap_outer*2; //more gaps
 	int totalgap_y=gap_inner*(structure.rows - 1)+gap_outer*2;
 
@@ -596,7 +703,7 @@ void restoreWindowsToPosition(LinkedList& desktop) {
         // Optionally flush the X server to ensure the move happens immediately
         //XFlush(display);
         if (current != NULL){
-    	    focusWindow(current->win);
+    	    focusWindow(desktop.getHead()->win);
         }	
         current = current->next;
     }
