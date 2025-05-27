@@ -350,6 +350,7 @@ void setup() {
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("L")), MODKEY, root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("F")), MODKEY, root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("C")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
+    XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("I")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("1")), (MODKEY), root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("2")), (MODKEY), root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("3")), (MODKEY), root, True, GrabModeAsync, GrabModeAsync);
@@ -470,6 +471,9 @@ void handleKeyPress(XKeyEvent* event) {
   	    else {
   	        std::cerr << "Mod+F pressed but no window is focused." << std::endl;
   	    }
+    }
+    else if (event->keycode == XKeysymToKeycode(display, XK_C) && event->state == (MODKEY | ShiftMask) && focusedWindow != None) {
+		config();
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_1) && event->state == MODKEY) {
         changedesktop(1);
