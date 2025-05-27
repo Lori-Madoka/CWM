@@ -1,0 +1,5 @@
+terminal=kitty
+terminal_width=400
+terminal_height=300
+window_width=1366
+window_height=768
