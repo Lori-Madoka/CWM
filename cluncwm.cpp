@@ -57,6 +57,7 @@ void switchmode();
 void tiling();
 layout getposition(int n_windows);
 int getnumberofwindows();
+int handle_xerror(Display *dpy, XErrorEvent *ee);
 void spawn(void* argz);
 void setCursor();
 std::string trim(const std::string& s);
@@ -268,6 +269,14 @@ int grabconfigval(const std::string& line) {
     return 0;
 }
 
+int handle_xerror(Display *dpy, XErrorEvent *ee) {
+    char error_text[1024];
+    XGetErrorText(dpy, ee->error_code, error_text, sizeof(error_text));
+    fprintf(stderr, "X error: %s (request: %d, resource id: 0x%lx)\n",
+            error_text, ee->request_code, ee->resourceid);
+    return 0; // Don't terminate
+}
+
 void config() {
 	std::cout << get_current_dir_name() << std::endl;
     std::ifstream inputFile("cluncconfig.txt");
@@ -327,6 +336,7 @@ void config() {
 
 
 void setup() {
+    XSetErrorHandler(handle_xerror);
     XSelectInput(display, root, SubstructureRedirectMask | SubstructureNotifyMask | ButtonPressMask | PointerMotionMask);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("T")), MODKEY, root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("Q")), MODKEY, root, True, GrabModeAsync, GrabModeAsync);
