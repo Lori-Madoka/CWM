@@ -10,6 +10,15 @@
 #include <unistd.h>
 #include <cmath>
 #include <string>
+#include <regex>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <vector>
+#include <future>
+#include <queue>
+#include <functional>
+#include <condition_variable>
 
 #define MODKEY Mod4Mask // Super key (Windows key)
 int TERMINAL_WIDTH = 600;
@@ -54,6 +63,7 @@ void handleDestroyRequest(XDestroyWindowEvent* event);
 void changedesktop(int desknum);
 void switchmode();
 void tiling();
+void animeight(Window window, int xtomoveto, int ytomoveto, int xtomovefrom, int ytomovefrom);
 layout getposition(int n_windows);
 int getnumberofwindows();
 int handle_xerror(Display *dpy, XErrorEvent *ee);
@@ -157,6 +167,19 @@ public:
         return nullptr;
     }
 
+    Node* getTail() {
+    	if (head==None) {
+    		return nullptr;
+    	}
+    	else {
+    		Node* temp = head;
+    		while (temp->next != None) {
+    			temp=temp->next;
+    		}
+    		return temp;
+    	}
+    }
+
     // Remove a node from the linked list
     void remove(Window window) {
         Node* temp = head;
@@ -214,6 +237,64 @@ public:
 	}
 };
 
+//so i needed threading and this is stolen from clunc webserver, I had no idea how it worked there so hopefully it works here x-x
+
+class ThreadPool {
+    //I have no idea how threading works
+public:
+    ThreadPool(size_t numThreads);
+    ~ThreadPool();
+    void enqueue(std::function<void()> task);
+
+private:
+    std::vector<std::thread> workers;
+    std::queue<std::function<void()>> tasks;
+    std::mutex queueMutex;
+    std::condition_variable condition;
+    std::atomic<bool> stop;
+    void workerThread();
+};
+
+ThreadPool::ThreadPool(size_t numThreads) : stop(false) {
+    for (size_t i = 0; i < numThreads; ++i) {
+        workers.emplace_back(&ThreadPool::workerThread, this);
+    }
+}
+
+ThreadPool::~ThreadPool() {
+    stop.store(true);
+    condition.notify_all();
+    for (std::thread &worker : workers) {
+        worker.join();
+    }
+}
+
+void ThreadPool::enqueue(std::function<void()> task) {
+    {
+        std::unique_lock<std::mutex> lock(queueMutex);
+        tasks.push(std::move(task));
+    }
+    condition.notify_one();
+}
+
+void ThreadPool::workerThread() {
+    while (!stop.load()) {
+        std::function<void()> task;
+        {
+            std::unique_lock<std::mutex> lock(queueMutex);
+            condition.wait(lock, [this] { return stop.load() || !tasks.empty(); });
+            if (stop.load() && tasks.empty()) {
+                return;
+            }
+            task = std::move(tasks.front());
+            tasks.pop();
+        }
+        task();
+    }
+}
+
+ThreadPool pool(8);
+
 LinkedList windows;
 LinkedList desktop1;
 LinkedList desktop2;
@@ -225,6 +306,8 @@ LinkedList desktop7;
 LinkedList desktop8;
 
 int currentdesk = 1;
+
+Node* currentfocusedNode;
 
 int main() {
     display = XOpenDisplay(NULL);
@@ -238,6 +321,8 @@ int main() {
     
     root = RootWindow(display, DefaultScreen(display));
 
+	currentfocusedNode = windows.getHead();
+	
     setup();
     run();
 
@@ -347,7 +432,7 @@ void config() {
 
 
 void setup() {
-    XSetErrorHandler(handle_xerror);
+	XSetErrorHandler(handle_xerror);
     XSelectInput(display, root, SubstructureRedirectMask | SubstructureNotifyMask | ButtonPressMask | PointerMotionMask);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("T")), MODKEY, root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("Q")), MODKEY, root, True, GrabModeAsync, GrabModeAsync);
@@ -369,14 +454,20 @@ void setup() {
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("6")), (MODKEY), root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("7")), (MODKEY), root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("8")), (MODKEY), root, True, GrabModeAsync, GrabModeAsync);
+    XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("Tab")), (MODKEY), root, True, GrabModeAsync, GrabModeAsync);
+    XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("Tab")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
     
     // Do not grab Button1 or Button3 without MODKEY
+	/*
     XUngrabButton(display, Button1, AnyModifier, root);
     XUngrabButton(display, Button3, AnyModifier, root);
-    
+    */
     XGrabButton(display, Button1, MODKEY, root, True, ButtonPressMask|ButtonReleaseMask|PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None);
     //XGrabButton(display, Button1, 0, window, True, ButtonPressMask|ButtonReleaseMask|PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None);
     XGrabButton(display, Button3, MODKEY, root, True, ButtonPressMask|ButtonReleaseMask|PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None);
+    //XGrabButton(display, Button1, 0, root, True, ButtonPressMask, GrabModeAsync, GrabModeAsync, None, None);
+    //XGrabButton(display, Button3, 0, root, True, ButtonPressMask, GrabModeAsync, GrabModeAsync, None, None);
+
     setCursor();
 }
 
@@ -482,7 +573,7 @@ void handleKeyPress(XKeyEvent* event) {
   	        std::cerr << "Mod+F pressed but no window is focused." << std::endl;
   	    }
     }
-    else if (event->keycode == XKeysymToKeycode(display, XK_I) && event->state == (MODKEY | ShiftMask) && focusedWindow != None) {
+    else if (event->keycode == XKeysymToKeycode(display, XK_I) && event->state == (MODKEY | ShiftMask)) {
 		config();
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_1) && event->state == MODKEY) {
@@ -510,6 +601,30 @@ void handleKeyPress(XKeyEvent* event) {
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_8) && event->state == MODKEY) {
         changedesktop(8);
+    }
+    else if (event->keycode == XKeysymToKeycode(display, XK_Tab) && event->state == MODKEY) {
+		if (currentfocusedNode!=None && currentfocusedNode->next!=None) {
+			focusWindow(currentfocusedNode->next->win);
+		}
+		else if (currentfocusedNode!=None && currentfocusedNode->next==None) {
+			Node* temp = windows.getHead();
+			currentfocusedNode=temp;
+			focusWindow(currentfocusedNode->win);
+		}
+    }
+    else if (event->keycode == XKeysymToKeycode(display, XK_Tab) && event->state == (MODKEY | ShiftMask) && focusedWindow != None) {
+    	Node* temp = windows.getHead();
+    	if (temp!=None && temp->next!=None && currentfocusedNode!=temp) {
+    		while (temp->next != currentfocusedNode) {
+    			temp=temp->next;
+    		}
+    		currentfocusedNode = temp;
+    		focusWindow(currentfocusedNode->win);
+    	}
+    	else if (temp==currentfocusedNode && temp->next!=None) {
+    		currentfocusedNode = windows.getTail();
+   			focusWindow(currentfocusedNode->win);
+    	}
     }
 }
 
@@ -572,7 +687,13 @@ void tiling() { //in here we tile brilliantly and intuitively
 		n_windows--;
 		mover->x = gap_outer; //need to be able to move the window back to its position afterwards
 		mover->y = gap_outer;
+		/*
 		XMoveResizeWindow(display, mover->win, gap_outer, gap_outer, xsize-(2*gap_outer), DISPLAY_HEIGHT-(2*gap_outer));
+		*/
+		XWindowAttributes attrs;
+		XGetWindowAttributes(display, mover->win, &attrs);
+		pool.enqueue([=]() {animeight(mover->win, mover->x, mover->y, attrs.x, attrs.y);});
+		XResizeWindow(display, mover->win, xsize-(2*gap_outer), DISPLAY_HEIGHT-(2*gap_outer));
 		mover=mover->next;
 	}
 	structure=getposition(n_windows, usedOddSlot);
@@ -590,13 +711,33 @@ void tiling() { //in here we tile brilliantly and intuitively
 			int y=gap_outer+j*(subheight+gap_inner);
 			mover->x = x;
 			mover->y = y;
-			XMoveResizeWindow(display, mover->win, x, y, subwidth, subheight);
+			//XMoveResizeWindow(display, mover->win, x, y, subwidth, subheight);
+			XWindowAttributes attrs;
+			XGetWindowAttributes(display, mover->win, &attrs);
+			pool.enqueue([=]() {animeight(mover->win, mover->x, mover->y, attrs.x, attrs.y);});
+			XResizeWindow(display, mover->win, subwidth, subheight);
 			mover=mover->next;
 			i++;
 			windex++;
 		}
 		j++;
 		i=0;
+	}
+}
+
+void animeight(Window window, int xtomoveto, int ytomoveto, int xtomovefrom, int ytomovefrom) {
+	int animationspeed = 40000;
+	float animationratio[8] = {1.0/32.0, 2.0/32.0, 4.0/32.0, 9.0/32.0, 9.0/32.0, 4.0/32.0, 2.0/32.0, 1.0/32.0};
+	float distancex = xtomoveto - xtomovefrom;
+	float distancey = ytomoveto - ytomovefrom;
+	float tempx = xtomovefrom;
+	float tempy = ytomovefrom;
+	for (int i=0; i<8; i++) {
+		tempx+=(animationratio[i]*distancex);
+		tempy+=(animationratio[i]*distancey);
+		XMoveWindow(display, window, tempx, tempy);
+		XFlush(display);
+		usleep(animationspeed);
 	}
 }
 
@@ -661,9 +802,13 @@ void identifyPlaace(int pos, Window window){
             break;
     }
     //if (!XMoveResizeWindow(display, window, winnewx, winnewy, windimw, windimh)); return;
-    XMoveResizeWindow(display, window, winnewx, winnewy, windimw, windimh);
-    std::cout << "window moved to " << winnewx << "x " << winnewy << "y" << std::endl;
+    //XMoveResizeWindow(display, window, winnewx, winnewy, windimw, windimh);
     Node* node = windows.find(window);
+    XWindowAttributes attrs;
+	XGetWindowAttributes(display, window, &attrs);
+	pool.enqueue([=]() {animeight(window, winnewx, winnewy, node->x, node->y);});
+	XResizeWindow(display, window, windimw, windimh);
+    std::cout << "window moved to " << winnewx << "x " << winnewy << "y" << std::endl;
         if (node) {
             node->x = winnewx;
             node->y = winnewy;
@@ -885,9 +1030,9 @@ void handleMotionNotify(XMotionEvent* event) {
 
 void handleMapRequest(XMapRequestEvent* event) {
     std::cout << "entered handleMapRequest" << std::endl;
-    if (event->window == None){
-        return;
-    }
+    XWindowAttributes windowAttrs;
+    if (event->window == None) return;
+    if (!XGetWindowAttributes(display, event->window, &windowAttrs) || windowAttrs.override_redirect) return;
     XSelectInput(display, event->window, EnterWindowMask | FocusChangeMask | StructureNotifyMask);
     XMapWindow(display, event->window);
     windows.append(event->window);
@@ -903,6 +1048,8 @@ void handleMapRequest(XMapRequestEvent* event) {
 }
 
 void handleConfigureRequest(XConfigureRequestEvent* event) {
+	XWindowAttributes windowAttrs;
+	if (!XGetWindowAttributes(display, event->window, &windowAttrs) || windowAttrs.override_redirect) return;
     std::cout << "entered hendleConfigureRequest" << std::endl;
     if (event->window == None) return;
     XWindowChanges changes;
@@ -932,6 +1079,7 @@ void focusWindow(Window window) {
     std::cout << "raised window" << std::endl;
     focusedWindow = window;
     XSetInputFocus(display, focusedWindow, RevertToPointerRoot, CurrentTime);
+    currentfocusedNode = windows.find(focusedWindow);
     std::cout << "server called for XsetInputFocus" << std::endl;
 }
 
@@ -962,6 +1110,10 @@ void closeWindow(Window window) {
 }
 
 void handleDestroyRequest(XDestroyWindowEvent* event){
+	/*
+	XWindowAttributes windowAttrs;
+	if (!XGetWindowAttributes(display, event->window, &windowAttrs) || windowAttrs.override_redirect) return;
+	*/
     //find and remove the destroyed window from the linked list
     if (event->window != None) {
         windows.remove(event->window);
