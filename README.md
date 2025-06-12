@@ -13,6 +13,8 @@ mostly funnctional and I would reccomend if you want something tiny that can run
 ### Modkey+T = open terminal window
 ### Modkey+L = switch mode (floating or tiling)
 ### Modkey+F = make the focussed window the dom window in tiling mode
+### Modkey+Tab = Cycle focus right (direction is relative)
+### Modkey+Shift+Tab = Cycle focus left (direction is relative)
 ### Modkey+numbers = change to numbered desktop
 ### Modkey+leftclick = focus/drag window
 ### Modkey+rightclick = focus/resize window
