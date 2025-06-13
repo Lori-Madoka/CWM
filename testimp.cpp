@@ -825,7 +825,7 @@ void moveWindowsOffscreen(LinkedList& desktop) {
         int originalY = current->y;
         std::cout << originalX << originalY << std::endl;
         // Move the window offscreen
-        XMoveWindow(display, current->win, originalX, -1000);
+        XMoveWindow(display, current->win, originalX, -DISPLAY_HEIGHT);
 
         std::cout << "current x:" << current->x << " current y:" << current->y << std::endl;
         std::cout << current << std::endl;
