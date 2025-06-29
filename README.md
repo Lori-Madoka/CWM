@@ -11,6 +11,7 @@ mostly funnctional and I would reccomend if you want something tiny that can run
 ## Window manager designed on the cluncpad for the cluncpad and other systems
 ## Keybinds:
 ### Modkey+T = open terminal window
+### Modkey+B = open chosen browser
 ### Modkey+L = switch mode (floating or tiling)
 ### Modkey+F = make the focussed window the dom window in tiling mode
 ### Modkey+Tab = Cycle focus right (direction is relative)
