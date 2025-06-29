@@ -17,6 +17,7 @@ mostly funnctional and I would reccomend if you want something tiny that can run
 ### Modkey+Tab = Cycle focus right (direction is relative)
 ### Modkey+Shift+Tab = Cycle focus left (direction is relative)
 ### Modkey+numbers = change to numbered desktop
+### Modkey+shift+numbers = yeet the focused window to the selected desktop
 ### Modkey+leftclick = focus/drag window
 ### Modkey+rightclick = focus/resize window
 ### Modkey+(q, a, z, e, c) = quick move window to corner/side of screen 
