@@ -1,5 +1,7 @@
 terminal=kitty
-terminal_width=400
-terminal_height=300
+terminal_width=600
+terminal_height=450
 window_width=1366
 window_height=768
+animationspeed=40000
+browser=chromium
