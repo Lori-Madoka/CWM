@@ -24,6 +24,7 @@
 int TERMINAL_WIDTH = 600;
 int TERMINAL_HEIGHT = 450;
 
+char* BROWSER = nullptr;
 char* TERMINAL = nullptr;
 int DISPLAY_WIDTH = 1366;
 int DISPLAY_HEIGHT = 768;
@@ -39,6 +40,8 @@ int dragStartX = 0, dragStartY = 0;  // Mouse position at the start of dragging
 int zizeStartX = 0, zizeStartY = 0; // rezizse position at start of rezize
 int winStartX = 0, winStartY = 0;    // Window position at the start of dragging
 int winStartW = 0, winStartH = 0;
+int animationspeed = 40000;
+int storeanimationspeed = 40000;
 
 struct layout {
 	int rows=0;
@@ -59,11 +62,15 @@ void focusWindow(Window window);
 void closeWindow(Window window);
 void identifyPlaace(int pos, Window window);
 int quereydesktop();
+bool isWindowValid(Window w);
 void handleDestroyRequest(XDestroyWindowEvent* event);
 void changedesktop(int desknum);
+void yeetwindow(int desknum);
 void switchmode();
 void tiling();
 void animeight(Window window, int xtomoveto, int ytomoveto, int xtomovefrom, int ytomovefrom);
+void speedupanimeight();
+void normaliseanimeight();
 layout getposition(int n_windows);
 int getnumberofwindows();
 int handle_xerror(Display *dpy, XErrorEvent *ee);
@@ -235,6 +242,29 @@ public:
 	        head = curry;
 	    }
 	}
+	
+	void pruneInvalidWindows() {
+	    Node* current = head;
+	    Node* prev = nullptr;
+	
+	    while (current) {
+	        if (!isWindowValid(current->win)) {
+	            std::cerr << "Pruning invalid window: " << current->win << std::endl;
+	            if (prev) {
+	                prev->next = current->next;
+	                delete current;
+	                current = prev->next;
+	            } else {
+	                head = current->next;
+	                delete current;
+	                current = head;
+	            }
+	        } else {
+	            prev = current;
+	            current = current->next;
+	        }
+	    }
+	}
 };
 
 //so i needed threading and this is stolen from clunc webserver, I had no idea how it worked there so hopefully it works here x-x
@@ -374,6 +404,8 @@ void config() {
             configFile << "terminal_height=300\n";
             configFile << "window_width=1366\n";
             configFile << "window_height=768\n";
+            configFile << "animationspeed=40000\n";
+            configFile << "browser=chromium\n";
             configFile.close();
         } else {
             std::cerr << "Unable to write default config.\n";
@@ -413,6 +445,14 @@ void config() {
                 DISPLAY_HEIGHT = grabconfigval(line);
                 std::cout << "receiverd DISPLAY_HEIGHT = " << DISPLAY_HEIGHT << std::endl;
                 break;
+            case 5:
+            	animationspeed = grabconfigval(line);
+            	std::cout << "receiverd animationspeed = " << animationspeed << std::endl;
+            	break;
+           	case 6:
+           		BROWSER = strdup(grabconfigtext(line).c_str());
+           		std::cout << "receiverd BROWSER = " << BROWSER << std::endl;
+           		break;
             default:
                 //prevent people doing sillies and trying to run arbritary code but thats possible by abusing terminal ig
                 break;
@@ -435,6 +475,7 @@ void setup() {
 	XSetErrorHandler(handle_xerror);
     XSelectInput(display, root, SubstructureRedirectMask | SubstructureNotifyMask | ButtonPressMask | PointerMotionMask);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("T")), MODKEY, root, True, GrabModeAsync, GrabModeAsync);
+    XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("B")), MODKEY, root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("Q")), MODKEY, root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("E")), MODKEY, root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("Z")), MODKEY, root, True, GrabModeAsync, GrabModeAsync);
@@ -454,6 +495,14 @@ void setup() {
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("6")), (MODKEY), root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("7")), (MODKEY), root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("8")), (MODKEY), root, True, GrabModeAsync, GrabModeAsync);
+    XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("1")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
+    XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("2")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
+    XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("3")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
+    XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("4")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
+    XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("5")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
+    XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("6")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
+    XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("7")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
+    XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("8")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("Tab")), (MODKEY), root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("Tab")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
     
@@ -527,9 +576,61 @@ void handleKeyPress(XKeyEvent* event) {
         const char* command[] = {TERMINAL, NULL};
         spawn((void*)command);
     }
-    else if (event->keycode == XKeysymToKeycode(display, XK_C) && event->state == (MODKEY | ShiftMask) && focusedWindow != None) {
+    else if (event->keycode == XKeysymToKeycode(display, XK_B) && event->state == MODKEY) {
+        const char* command[] = {BROWSER, NULL};
+        spawn((void*)command);
+    }
+    else if (event->keycode == XKeysymToKeycode(display, XK_C) && event->state == (MODKEY|ShiftMask) && focusedWindow != None) {
         closeWindow(focusedWindow);
         std::cout << "pressed mod+shift+C" << std::endl;
+    }
+    else if (event->keycode == XKeysymToKeycode(display, XK_1) && event->state == (MODKEY|ShiftMask) && focusedWindow != None) {    
+		yeetwindow(1);
+		if (mode == 1) {
+            tiling();
+        }
+    }
+    else if (event->keycode == XKeysymToKeycode(display, XK_2) && event->state == (MODKEY|ShiftMask) && focusedWindow != None) {    
+		yeetwindow(2);
+		if (mode == 1) {
+            tiling();
+        }
+    }
+    else if (event->keycode == XKeysymToKeycode(display, XK_3) && event->state == (MODKEY|ShiftMask) && focusedWindow != None) {    
+		yeetwindow(3);
+		if (mode == 1) {
+            tiling();
+        }
+    }
+    else if (event->keycode == XKeysymToKeycode(display, XK_4) && event->state == (MODKEY|ShiftMask) && focusedWindow != None) {    
+		yeetwindow(4);
+		if (mode == 1) {
+            tiling();
+        }
+    }
+    else if (event->keycode == XKeysymToKeycode(display, XK_5) && event->state == (MODKEY|ShiftMask) && focusedWindow != None) {    
+		yeetwindow(5);
+		if (mode == 1) {
+            tiling();
+        }
+    }
+    else if (event->keycode == XKeysymToKeycode(display, XK_6) && event->state == (MODKEY|ShiftMask) && focusedWindow != None) {    
+		yeetwindow(6);
+		if (mode == 1) {
+            tiling();
+        }
+    }
+    else if (event->keycode == XKeysymToKeycode(display, XK_7) && event->state == (MODKEY|ShiftMask) && focusedWindow != None) {    
+		yeetwindow(7);
+		if (mode == 1) {
+            tiling();
+        }
+    }
+    else if (event->keycode == XKeysymToKeycode(display, XK_8) && event->state == (MODKEY|ShiftMask) && focusedWindow != None) {    
+		yeetwindow(8);
+		if (mode == 1) {
+            tiling();
+        }
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_S) && event->state == MODKEY) {
         identifyPlaace(1, focusedWindow);
@@ -603,18 +704,32 @@ void handleKeyPress(XKeyEvent* event) {
         changedesktop(8);
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_Tab) && event->state == MODKEY) {
-		if (currentfocusedNode!=None && currentfocusedNode->next!=None) {
+		windows.pruneInvalidWindows();
+		if (windows.size() == 0) {
+		        std::cerr << "No focused window to cycle.\n";
+		        return;
+	    }
+	    std::cout << "passed check for nullptr node" << std::endl;
+	    std::cout << currentfocusedNode << std::endl;
+		if (currentfocusedNode!=nullptr && currentfocusedNode->next!=nullptr) {
 			focusWindow(currentfocusedNode->next->win);
 		}
-		else if (currentfocusedNode!=None && currentfocusedNode->next==None) {
+		else if (currentfocusedNode!=nullptr && currentfocusedNode->next==nullptr) {
 			Node* temp = windows.getHead();
 			currentfocusedNode=temp;
 			focusWindow(currentfocusedNode->win);
 		}
     }
     else if (event->keycode == XKeysymToKeycode(display, XK_Tab) && event->state == (MODKEY | ShiftMask) && focusedWindow != None) {
+		windows.pruneInvalidWindows();
+		if (windows.size() == 0) {
+		        std::cerr << "No focused window to cycle.\n";
+		        return;
+		}
+		std::cout << "passed check for nullptr node" << std::endl;
+		std::cout << currentfocusedNode << std::endl;
     	Node* temp = windows.getHead();
-    	if (temp!=None && temp->next!=None && currentfocusedNode!=temp) {
+    	if (temp!=nullptr && temp->next!=nullptr && currentfocusedNode!=temp) {
     		while (temp->next != currentfocusedNode) {
     			temp=temp->next;
     		}
@@ -635,6 +750,12 @@ void switchmode() {
 	}
 	else mode=0;
 }
+
+bool isWindowValid(Window w) {
+    XWindowAttributes attrs;
+    return XGetWindowAttributes(display, w, &attrs) != 0;
+}
+
 
 layout getposition(int n_windows, bool usedOddSlot) {
 	layout structure;
@@ -660,6 +781,7 @@ layout getposition(int n_windows, bool usedOddSlot) {
 }
 
 void tiling() { //in here we tile brilliantly and intuitively
+	windows.pruneInvalidWindows();
 	int height=DISPLAY_HEIGHT;
 	int width=DISPLAY_WIDTH;
 	int n_windows=windows.size();
@@ -677,7 +799,7 @@ void tiling() { //in here we tile brilliantly and intuitively
 	if (!mover || !mover->next) return;
 	if (n_windows==0) return;
 	else if (n_windows==1) {
-		identifyPlaace(1, focusedWindow);
+		identifyPlaace(1, windows.getHead()->win);
 		return;
 	}
 	else if (n_windows%2!=0) { //if there is odd number handle the dom window here
@@ -726,7 +848,6 @@ void tiling() { //in here we tile brilliantly and intuitively
 }
 
 void animeight(Window window, int xtomoveto, int ytomoveto, int xtomovefrom, int ytomovefrom) {
-	int animationspeed = 40000;
 	float animationratio[8] = {1.0/32.0, 2.0/32.0, 4.0/32.0, 9.0/32.0, 9.0/32.0, 4.0/32.0, 2.0/32.0, 1.0/32.0};
 	float distancex = xtomoveto - xtomovefrom;
 	float distancey = ytomoveto - ytomovefrom;
@@ -739,6 +860,15 @@ void animeight(Window window, int xtomoveto, int ytomoveto, int xtomovefrom, int
 		XFlush(display);
 		usleep(animationspeed);
 	}
+}
+
+void speedupanimeight() {
+	storeanimationspeed=animationspeed;
+	animationspeed = 50;
+}
+
+void normaliseanimeight() {
+	animationspeed = storeanimationspeed;
 }
 
 void identifyPlaace(int pos, Window window){
@@ -936,17 +1066,78 @@ int quereydesktop(int currentdesk, int desktoswitch){
 }
 
 void changedesktop(int desknum) {
+	speedupanimeight();
     std::cout << "Entered changedesktop" << std::endl;
     // Move all windows of the current desktop offscreen
     moveWindowsOffscreen(windows);
     //switch to the selected desktop
-    if (desknum >= 1 && desknum <= 8) {
+    if (desknum == currentdesk) {
+    	return;
+    }
+    else if (desknum >= 1 && desknum <= 8) {
         currentdesk = quereydesktop(currentdesk, desknum);
     }
-    //usleep(16000); // wait for stability
     std::cout << "success moved and reassigned linked list windows" << std::endl;
     // Restore windows for the newly selected desktop
+    normaliseanimeight();
     restoreWindowsToPosition(windows);
+}
+
+void yeetwindow(int desknum) {
+	if (desknum == currentdesk) {return;}
+    int originalX = currentfocusedNode->x;
+    int originalY = currentfocusedNode->y;
+    std::cout << originalX << originalY << std::endl;
+    //move the window offscreen
+    XMoveWindow(display, currentfocusedNode->win, originalX, -DISPLAY_HEIGHT);
+    std::cout << "current x:" << currentfocusedNode->x << " current y:" << currentfocusedNode->y << std::endl;
+    std::cout << currentfocusedNode << std::endl;
+    Node* movedwindow;
+	if (desknum == 1) {
+		desktop1.append(currentfocusedNode->win);
+		movedwindow = desktop1.find(currentfocusedNode->win);
+	}
+	else if (desknum == 2) {
+		desktop2.append(currentfocusedNode->win);
+		movedwindow = desktop2.find(currentfocusedNode->win);
+	}
+	else if (desknum == 3) {
+		desktop3.append(currentfocusedNode->win);
+		movedwindow = desktop3.find(currentfocusedNode->win);
+	}
+	else if (desknum == 4) {
+		desktop4.append(currentfocusedNode->win);
+		movedwindow = desktop4.find(currentfocusedNode->win);		
+	}
+	else if (desknum == 5) {
+		desktop5.append(currentfocusedNode->win);
+		movedwindow = desktop5.find(currentfocusedNode->win);		
+	}
+	else if (desknum == 6) {
+		desktop6.append(currentfocusedNode->win);
+		movedwindow = desktop6.find(currentfocusedNode->win);		
+	}
+	else if (desknum == 7) {
+		desktop7.append(currentfocusedNode->win);
+		movedwindow = desktop7.find(currentfocusedNode->win);			
+	}
+	else if (desknum == 8) {
+		desktop8.append(currentfocusedNode->win);
+		movedwindow = desktop8.find(currentfocusedNode->win);		
+	}
+	movedwindow->x = originalX;
+	movedwindow->y = originalY;
+	windows.remove(currentfocusedNode->win);
+	Node* head = windows.getHead();
+    if (head) {
+        currentfocusedNode = head;
+        focusedWindow = head->win;
+        focusWindow(focusedWindow);
+    } else {
+        currentfocusedNode = nullptr;
+        focusedWindow = None;
+        std::cout << "No windows left on current desktop after move.\n";
+    }
 }
 
 void handleButtonPress(XButtonEvent* event) {
@@ -1037,11 +1228,12 @@ void handleMapRequest(XMapRequestEvent* event) {
     XMapWindow(display, event->window);
     windows.append(event->window);
     focusWindow(event->window);
-    // Add the window to the current desktop's window list
     XMoveResizeWindow(display, event->window, 
                       (DISPLAY_WIDTH - TERMINAL_WIDTH) / 2, 
                       (DISPLAY_HEIGHT - TERMINAL_HEIGHT) / 2, 
                       TERMINAL_WIDTH, TERMINAL_HEIGHT);
+    currentfocusedNode->x = DISPLAY_WIDTH/2;
+    currentfocusedNode->y = DISPLAY_HEIGHT/2;
     if (mode==1) {
     	tiling();
     }  
@@ -1074,13 +1266,18 @@ void handleConfigureRequest(XConfigureRequestEvent* event) {
 }
 
 void focusWindow(Window window) {
-    std::cout << "Entered focusWindow" << std::endl;
-    XRaiseWindow(display, window);
-    std::cout << "raised window" << std::endl;
-    focusedWindow = window;
-    XSetInputFocus(display, focusedWindow, RevertToPointerRoot, CurrentTime);
-    currentfocusedNode = windows.find(focusedWindow);
-    std::cout << "server called for XsetInputFocus" << std::endl;
+	if (window!=None) {	
+	    std::cout << "Entered focusWindow" << std::endl;
+	    XRaiseWindow(display, window);
+	    std::cout << "raised window" << std::endl;
+	    focusedWindow = window;
+	    XSetInputFocus(display, focusedWindow, RevertToPointerRoot, CurrentTime);
+	    currentfocusedNode = windows.find(focusedWindow);
+	    std::cout << "server called for XsetInputFocus" << std::endl;
+	}
+	else {
+		return;
+	}
 }
 
 void closeWindow(Window window) {
