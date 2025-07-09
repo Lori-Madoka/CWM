@@ -505,18 +505,10 @@ void setup() {
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("8")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("Tab")), (MODKEY), root, True, GrabModeAsync, GrabModeAsync);
     XGrabKey(display, XKeysymToKeycode(display, XStringToKeysym("Tab")), (MODKEY|ShiftMask), root, True, GrabModeAsync, GrabModeAsync);
-    
-    // Do not grab Button1 or Button3 without MODKEY
-	/*
-    XUngrabButton(display, Button1, AnyModifier, root);
-    XUngrabButton(display, Button3, AnyModifier, root);
-    */
+
     XGrabButton(display, Button1, MODKEY, root, True, ButtonPressMask|ButtonReleaseMask|PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None);
     //XGrabButton(display, Button1, 0, window, True, ButtonPressMask|ButtonReleaseMask|PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None);
     XGrabButton(display, Button3, MODKEY, root, True, ButtonPressMask|ButtonReleaseMask|PointerMotionMask, GrabModeAsync, GrabModeAsync, None, None);
-    //XGrabButton(display, Button1, 0, root, True, ButtonPressMask, GrabModeAsync, GrabModeAsync, None, None);
-    //XGrabButton(display, Button3, 0, root, True, ButtonPressMask, GrabModeAsync, GrabModeAsync, None, None);
-
     setCursor();
 }
 
@@ -963,9 +955,6 @@ void moveWindowsOffscreen(LinkedList& desktop) {
         current->x = originalX;
         current->y = originalY;
 
-        // Optionally flush the X server to ensure the move happens immediately
-        //XFlush(display);
-
         current = current->next;
     }
 
@@ -1066,21 +1055,21 @@ int quereydesktop(int currentdesk, int desktoswitch){
 }
 
 void changedesktop(int desknum) {
+    if (desknum == currentdesk) {
+    	return;
+    }
 	speedupanimeight();
     std::cout << "Entered changedesktop" << std::endl;
     // Move all windows of the current desktop offscreen
     moveWindowsOffscreen(windows);
     //switch to the selected desktop
-    if (desknum == currentdesk) {
-    	return;
-    }
-    else if (desknum >= 1 && desknum <= 8) {
+    if (desknum >= 1 && desknum <= 8) {
         currentdesk = quereydesktop(currentdesk, desknum);
     }
     std::cout << "success moved and reassigned linked list windows" << std::endl;
     // Restore windows for the newly selected desktop
-    normaliseanimeight();
     restoreWindowsToPosition(windows);
+    normaliseanimeight();
 }
 
 void yeetwindow(int desknum) {
@@ -1307,10 +1296,6 @@ void closeWindow(Window window) {
 }
 
 void handleDestroyRequest(XDestroyWindowEvent* event){
-	/*
-	XWindowAttributes windowAttrs;
-	if (!XGetWindowAttributes(display, event->window, &windowAttrs) || windowAttrs.override_redirect) return;
-	*/
     //find and remove the destroyed window from the linked list
     if (event->window != None) {
         windows.remove(event->window);
