@@ -889,6 +889,9 @@ int quereydesktop(int currentdesk, int desktoswitch){
 }
 
 void changedesktop(int desknum) {
+    if (desknum == currentdesk) {
+    	return;
+    }
     // Move all windows of the current desktop offscreen
     moveWindowsOffscreen(windows);
     //switch to the selected desktop
