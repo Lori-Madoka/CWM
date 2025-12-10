@@ -1,4 +1,4 @@
-// g++ -o testimp testimp.cpp -lX11 -lXrandr
+// g++ -o multimon multidisplaysupport.cpp -lX11 -lXrandr
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
@@ -1296,17 +1296,23 @@ void closeWindow(Window window) {
     event.xclient.data.l[1] = CurrentTime;
     XSendEvent(display, window, False, NoEventMask, &event);
     XSync(display, false);
-    //kill window from linked list
-    trackmonitor[currentmonitor].desktop[currentdesk].remove(window);
-    //focus another window
-    Node* headNode = trackmonitor[currentmonitor].desktop[currentdesk].getHead();  //grab some head
-    if (headNode) {
-        focusWindow(headNode->win);  //focus the first window in the list
-    } else {
-        focusedWindow = None;  //uo windows left to focus
+    XWindowAttributes windowAttrs;
+    if (!XGetWindowAttributes(display, window, &windowAttrs) || windowAttrs.override_redirect) { //make sure window is actually destroyed before removing it from the list
+	    //kill window from linked list
+	    trackmonitor[currentmonitor].desktop[currentdesk].remove(window);
+	    //focus another window
+	    Node* headNode = trackmonitor[currentmonitor].desktop[currentdesk].getHead();  //grab some head
+	    if (headNode) {
+	        focusWindow(headNode->win);  //focus the first window in the list
+	    } else {
+	        focusedWindow = None;  //uo windows left to focus
+	    }
+	    std::cout << "success in killling focused window" << std::endl;
+	    if (mode==1) tiling();
     }
-    std::cout << "success in killling focused window" << std::endl;
-    if (mode==1) tiling();
+    else {
+    	return;
+    }
 }
 
 void handleDestroyRequest(XDestroyWindowEvent* event){
