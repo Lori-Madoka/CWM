@@ -1,4 +1,4 @@
-// g++ -o multimon multidisplaysupport.cpp -lX11 -lXrandr
+// g++ -o testimp testimp.cpp -lX11 -lXrandr
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
