@@ -1,4 +1,5 @@
-// g++ -o testimp testimp.cpp -lX11 -lXrandr
+// g++ -o multimon multidisplaysupport.cpp -lX11 -lXrandr
+//introducing: The Unreadables!! ft Lori Madoka  
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
@@ -29,6 +30,8 @@ int TERMINAL_HEIGHT = 450;
 
 char* BROWSER = nullptr;
 char* TERMINAL = nullptr;
+
+int alreadyrunning = 0;
 
 int nmonitors = 0;
 Display* display;
@@ -84,6 +87,7 @@ std::string trim(const std::string& s);
 std::string grabconfigtext(const std::string& line);
 int grabconfigval(const std::string& line);
 void centerMouseOnMonitor(int monitorIndex);
+
 
 // Node class to represent each element in the linked list
 class Node {
@@ -354,6 +358,7 @@ struct displaydimensions {
 	LinkedList desktop[9];
 };
 std::vector<displaydimensions> trackmonitor;
+std::vector<displaydimensions> newtrackmonitor;
 
 int DISPLAY_WIDTH = 1366;
 int DISPLAY_HEIGHT = 768;
@@ -372,6 +377,7 @@ int main() {
 	config();
 	currentfocusedNode = trackmonitor[currentmonitor].desktop[currentdesk].getHead();
     setup();
+    alreadyrunning = 1;
     run();
 
     XCloseDisplay(display);
@@ -422,30 +428,87 @@ void centerMouseOnMonitor(int monitornum) {
     XFlush(display);
 }
 
+int comparemonitorspecs(displaydimensions newmon, displaydimensions oldmon) {
+	if (newmon.x == oldmon.x && newmon.y == oldmon.y && newmon.width == oldmon.width && newmon.height == oldmon.height) {
+		return 1;
+	}
+	return 0;
+}
+
 void config() {
-	XRRMonitorInfo* monitors = XRRGetMonitors(display, root, True, &nmonitors);
-	trackmonitor.clear();
-	trackmonitor.resize(nmonitors);
-	for (int i=0; i<nmonitors; ++i) {
-		trackmonitor[i].monnumber = i;
-		trackmonitor[i].width = monitors[i].width;
-		trackmonitor[i].height = monitors[i].height;
-		trackmonitor[i].x = monitors[i].x;
-		trackmonitor[i].y = monitors[i].y;
-	}
-	RROutput primary = XRRGetOutputPrimary(display, root);
-	int primary_index = 0;
-	for (int i = 0; i < nmonitors; ++i) {
-	    for (int j = 0; j < monitors[i].noutput; ++j) {
-	        if (monitors[i].outputs[j] == primary) {
-	            primary_index = i;
-	            break;
-	        }
-	    }
-	}
+    XRRMonitorInfo* monitors = XRRGetMonitors(display, root, True, &nmonitors);
+    if (!monitors || nmonitors <= 0) {
+        std::cerr << "No monitors detected\n";
+        return;
+    }
+
+    //detect primary
+    RROutput primary = XRRGetOutputPrimary(display, root);
+    int primary_index = 0;
+    bool found = false;
+
+    for (int i = 0; i < nmonitors && !found; ++i) {
+        for (int j = 0; j < monitors[i].noutput; ++j) {
+            if (monitors[i].outputs[j] == primary) {
+                primary_index = i;
+                found = true;
+                break;
+            }
+        }
+    }
+
+    XRRSetScreenSize(display, root, monitors[primary_index].width, monitors[primary_index].height, monitors[primary_index].mwidth, monitors[primary_index].mheight);
+    DISPLAY_WIDTH  = monitors[primary_index].width;
+    DISPLAY_HEIGHT = monitors[primary_index].height;
+    XSync(display, False);
+
+    //exctact all current windows
+    std::vector<Node> collected;
+
+    if (alreadyrunning) {
+        for (auto &mon : trackmonitor) {
+            for (int d = 0; d < 8; ++d) {
+                Node* node = mon.desktop[d].getHead();
+                while (node) {
+                    collected.push_back(*node);
+                    node = node->next;
+                }
+            }
+        }
+    }
+
+    //rebuild monitor layout
+    std::vector<displaydimensions> newmons(nmonitors);
+
+    for (int i = 0; i < nmonitors; ++i) {
+        newmons[i].monnumber = i;
+        newmons[i].width  = monitors[i].width;
+        newmons[i].height = monitors[i].height;
+        newmons[i].x = monitors[i].x;
+        newmons[i].y = monitors[i].y;
+        newmons[i].currentfocuseddesk = 1;
+        newmons[i].lastdesktop = 1;
+        newmons[i].focusedNode = nullptr;
+    }
+
+    //reassign all windows to primary monitor
+    for (auto &n : collected) {
+        newmons[primary_index].desktop[currentdesk].append(n.win);
+        Node* added = newmons[primary_index].desktop[currentdesk].find(n.win);
+        if (!added) continue;
+        added->x = newmons[primary_index].x + 40;
+        added->y = newmons[primary_index].y + 40;
+        added->isfocussed = n.isfocussed;
+        XMoveWindow(display, n.win, added->x, added->y);
+    }
+
+    trackmonitor.swap(newmons);
+    centerMouseOnMonitor(primary_index);
+
+    XRRFreeMonitors(monitors);
 	DISPLAY_WIDTH = trackmonitor[primary_index].width;
-	DISPLAY_HEIGHT = trackmonitor[primary_index].height;
-	std::cout << get_current_dir_name() << std::endl;
+	DISPLAY_HEIGHT = trackmonitor[primary_index].height;	
+	//std::cout << get_current_dir_name() << std::endl;
     std::ifstream inputFile("cluncconfig.txt");
     centerMouseOnMonitor(primary_index);
     if (!inputFile) {
@@ -495,6 +558,7 @@ void config() {
             	std::cout << "receiverd animationspeed = " << animationspeed << std::endl;
             	break;
            	case 4:
+           		if (BROWSER) free(BROWSER);
            		BROWSER = strdup(grabconfigtext(line).c_str());
            		std::cout << "receiverd BROWSER = " << BROWSER << std::endl;
            		break;
@@ -509,13 +573,14 @@ void config() {
     }
 
     inputFile.close();
-    // Debug print
+    //Debug print
     std::cout << "Loaded config:\n";
     std::cout << "TERMINAL=" << TERMINAL << "\n";
     std::cout << "TERMINAL_WIDTH=" << TERMINAL_WIDTH << "\n";
     std::cout << "TERMINAL_HEIGHT=" << TERMINAL_HEIGHT << "\n";
-    XRRFreeMonitors(monitors);
+    
 }
+
 
 void setup() {
 	XSetErrorHandler(handle_xerror);
@@ -876,7 +941,8 @@ void animeight(Window window, int xtomoveto, int ytomoveto, int xtomovefrom, int
 			tempx+=(animationratio[i]*distancex);
 			tempy+=(animationratio[i]*distancey);
 			XMoveWindow(display, window, tempx, tempy);
-			XFlush(display);
+			//XFlush(display);
+			XSync(display, true);
 			usleep(animationspeed);
 		}
 	}
@@ -1265,7 +1331,7 @@ void handleConfigureRequest(XConfigureRequestEvent* event) {
 }
 
 void focusWindow(Window window) {
-	if (window!=None) {	
+	if (window!=None && trackmonitor[currentmonitor].desktop[currentdesk].find(window)!=None) {	
 	    std::cout << "Entered focusWindow" << std::endl;
 	    XRaiseWindow(display, window);
 	    std::cout << "raised window" << std::endl;
