@@ -1,5 +1,4 @@
-// g++ -o cluncwm cluncwm.cpp -lX11 -lXrandr
-// stabl cluncwm
+   // g++ -o multimon multidisplaysupport.cpp -lX11 -lXrandr
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
@@ -31,6 +30,8 @@ int TERMINAL_HEIGHT = 450;
 char* BROWSER = nullptr;
 char* TERMINAL = nullptr;
 
+int alreadyrunning = 0;
+
 int nmonitors = 0;
 Display* display;
 Window root;
@@ -39,9 +40,9 @@ Window focusedWindow = None;
 Window draggingWindow = None;
 Window rezizeWindow = None;
 int mode = 0; //0 is floating, 1 is tiling
-int dragStartX = 0, dragStartY = 0;  // Mouse position at the start of dragging
-int zizeStartX = 0, zizeStartY = 0; // rezizse position at start of rezize
-int winStartX = 0, winStartY = 0;    // Window position at the start of dragging
+int dragStartX = 0, dragStartY = 0;  //mouse position at the start of dragging
+int zizeStartX = 0, zizeStartY = 0; //rezizse position at start of rezize
+int winStartX = 0, winStartY = 0;    //window position at the start of dragging
 int winStartW = 0, winStartH = 0;
 int animationspeed = 35000;
 int storeanimationspeed = 35000;
@@ -86,7 +87,7 @@ std::string grabconfigtext(const std::string& line);
 int grabconfigval(const std::string& line);
 void centerMouseOnMonitor(int monitorIndex);
 
-// Node class to represent each element in the linked list
+
 class Node {
 public:
     Window win;
@@ -97,7 +98,6 @@ public:
     Node(Window window, int xPos, int yPos, int focus) : win(window), x(xPos), y(yPos), isfocussed(focus), next(nullptr) {}
 };
 
-// LinkedList class to manage the nodes
 class LinkedList {
 private:
     Node* head;  //head of the linked list
@@ -160,7 +160,8 @@ public:
         Node* newNode = new Node(window, x, y, focus);
         if (!head) {
             head = newNode;
-        } else {
+        } 
+        else {
             Node* temp = head;
             while (temp->next) {
                 temp = temp->next;
@@ -201,7 +202,8 @@ public:
             if (temp->win == window) {
                 if (prev) {
                     prev->next = temp->next;
-                } else {
+                } 
+                else {
                     head = temp->next;
                 }
                 delete temp;
@@ -260,12 +262,14 @@ public:
 	                prev->next = current->next;
 	                delete current;
 	                current = prev->next;
-	            } else {
+	            } 
+	            else {
 	                head = current->next;
 	                delete current;
 	                current = head;
 	            }
-	        } else {
+	        } 
+	        else {
 	            prev = current;
 	            current = current->next;
 	        }
@@ -286,6 +290,7 @@ public:
 };
 
 //so i needed threading and this is stolen from clunc webserver, I had no idea how it worked there so hopefully it works here x-x
+//also this doesnt get used (or shouldnt, dont enable animation thats for when wayland support starts existing, or if you have the beefiest compute known to everyone)
 
 class ThreadPool {
     //I have no idea how threading works
@@ -355,6 +360,7 @@ struct displaydimensions {
 	LinkedList desktop[9];
 };
 std::vector<displaydimensions> trackmonitor;
+std::vector<displaydimensions> newtrackmonitor;
 
 int DISPLAY_WIDTH = 1366;
 int DISPLAY_HEIGHT = 768;
@@ -373,6 +379,7 @@ int main() {
 	config();
 	currentfocusedNode = trackmonitor[currentmonitor].desktop[currentdesk].getHead();
     setup();
+    alreadyrunning = 1;
     run();
 
     XCloseDisplay(display);
@@ -423,30 +430,87 @@ void centerMouseOnMonitor(int monitornum) {
     XFlush(display);
 }
 
+int comparemonitorspecs(displaydimensions newmon, displaydimensions oldmon) {
+	if (newmon.x == oldmon.x && newmon.y == oldmon.y && newmon.width == oldmon.width && newmon.height == oldmon.height) {
+		return 1;
+	}
+	return 0;
+}
+
 void config() {
-	XRRMonitorInfo* monitors = XRRGetMonitors(display, root, True, &nmonitors);
-	trackmonitor.clear();
-	trackmonitor.resize(nmonitors);
-	for (int i=0; i<nmonitors; ++i) {
-		trackmonitor[i].monnumber = i;
-		trackmonitor[i].width = monitors[i].width;
-		trackmonitor[i].height = monitors[i].height;
-		trackmonitor[i].x = monitors[i].x;
-		trackmonitor[i].y = monitors[i].y;
-	}
-	RROutput primary = XRRGetOutputPrimary(display, root);
-	int primary_index = 0;
-	for (int i = 0; i < nmonitors; ++i) {
-	    for (int j = 0; j < monitors[i].noutput; ++j) {
-	        if (monitors[i].outputs[j] == primary) {
-	            primary_index = i;
-	            break;
-	        }
-	    }
-	}
+    XRRMonitorInfo* monitors = XRRGetMonitors(display, root, True, &nmonitors);
+    if (!monitors || nmonitors <= 0) {
+        std::cerr << "No monitors detected \n";
+        return;
+    }
+
+    //detect primary
+    RROutput primary = XRRGetOutputPrimary(display, root);
+    int primary_index = 0;
+    bool found = false;
+
+    for (int i = 0; i < nmonitors && !found; ++i) {
+        for (int j = 0; j < monitors[i].noutput; ++j) {
+            if (monitors[i].outputs[j] == primary) {
+                primary_index = i;
+                found = true;
+                break;
+            }
+        }
+    }
+
+    XRRSetScreenSize(display, root, monitors[primary_index].width, monitors[primary_index].height, monitors[primary_index].mwidth, monitors[primary_index].mheight);
+    DISPLAY_WIDTH  = monitors[primary_index].width;
+    DISPLAY_HEIGHT = monitors[primary_index].height;
+    XSync(display, False);
+
+    //exctact all current windows
+    std::vector<Node> collected;
+
+    if (alreadyrunning) {
+        for (auto &mon : trackmonitor) {
+            for (int d = 0; d < 8; ++d) {
+                Node* node = mon.desktop[d].getHead();
+                while (node) {
+                    collected.push_back(*node);
+                    node = node->next;
+                }
+            }
+        }
+    }
+
+    //rebuild monitor layout
+    std::vector<displaydimensions> newmons(nmonitors);
+
+    for (int i = 0; i < nmonitors; ++i) {
+        newmons[i].monnumber = i;
+        newmons[i].width  = monitors[i].width;
+        newmons[i].height = monitors[i].height;
+        newmons[i].x = monitors[i].x;
+        newmons[i].y = monitors[i].y;
+        newmons[i].currentfocuseddesk = 1;
+        newmons[i].lastdesktop = 1;
+        newmons[i].focusedNode = nullptr;
+    }
+
+    //reassign all windows to primary monitor
+    for (auto &n : collected) {
+        newmons[primary_index].desktop[currentdesk].append(n.win);
+        Node* added = newmons[primary_index].desktop[currentdesk].find(n.win);
+        if (!added) continue;
+        added->x = newmons[primary_index].x + 40;
+        added->y = newmons[primary_index].y + 40;
+        added->isfocussed = n.isfocussed;
+        XMoveWindow(display, n.win, added->x, added->y);
+    }
+
+    trackmonitor.swap(newmons);
+    centerMouseOnMonitor(primary_index);
+
+    XRRFreeMonitors(monitors);
 	DISPLAY_WIDTH = trackmonitor[primary_index].width;
-	DISPLAY_HEIGHT = trackmonitor[primary_index].height;
-	std::cout << get_current_dir_name() << std::endl;
+	DISPLAY_HEIGHT = trackmonitor[primary_index].height;	
+	//std::cout << get_current_dir_name() << std::endl;
     std::ifstream inputFile("cluncconfig.txt");
     centerMouseOnMonitor(primary_index);
     if (!inputFile) {
@@ -492,6 +556,7 @@ void config() {
             	animationspeed = grabconfigval(line);
             	break;
            	case 4:
+           		if (BROWSER) free(BROWSER);
            		BROWSER = strdup(grabconfigtext(line).c_str());
            		break;
            	case 5:
@@ -503,9 +568,9 @@ void config() {
         currentline++;
     }
 
-    inputFile.close();
-    XRRFreeMonitors(monitors);
+    inputFile.close();    
 }
+
 
 void setup() {
 	XSetErrorHandler(handle_xerror);
@@ -778,7 +843,7 @@ layout getposition(int n_windows, bool usedOddSlot) {
 	return structure;
 }
 
-void tiling() { //in here we tile brilliantly and intuitively
+void tiling() { //in here we tile brilliantly and intuitively, m pride and joy
 	trackmonitor[currentmonitor].desktop[currentdesk].pruneInvalidWindows();
 	int height=DISPLAY_HEIGHT;
 	int width=DISPLAY_WIDTH;
@@ -852,7 +917,8 @@ void animeight(Window window, int xtomoveto, int ytomoveto, int xtomovefrom, int
 			tempx+=(animationratio[i]*distancex);
 			tempy+=(animationratio[i]*distancey);
 			XMoveWindow(display, window, tempx, tempy);
-			XFlush(display);
+			//XFlush(display);
+			XSync(display, true);
 			usleep(animationspeed);
 		}
 	}
@@ -871,7 +937,14 @@ void normaliseanimeight() {
 }
 
 void identifyPlaace(int pos, Window window){
-    if (!window || window == None){
+	if (window == None) {
+	    return;
+	}
+	Node* temp = trackmonitor[currentmonitor].desktop[currentdesk].find(window);
+	if (!temp) {
+	    return;
+	}
+    if (!currentfocusedNode || currentfocusedNode == nullptr){
            return;
    	}
        XWindowAttributes windowAttrs;
@@ -935,10 +1008,10 @@ void identifyPlaace(int pos, Window window){
 	XGetWindowAttributes(display, window, &attrs);
 	pool.enqueue([=]() {animeight(window, winnewx, winnewy, node->x, node->y);});
 	XResizeWindow(display, window, windimw, windimh);
-    if (node) {
-        node->x = winnewx;
-        node->y = winnewy;
-    }
+        if (node) {
+            node->x = winnewx;
+            node->y = winnewy;
+        }
 }
 
 //move all windows offscreen without updating their positions in the linked list
@@ -961,14 +1034,13 @@ void moveWindowsOffscreen(LinkedList& workingdesktop) {
 //restore all windows to their original positions using the linked list
 void restoreWindowsToPosition(LinkedList& desktop) {
     Node* current = desktop.getHead();
-	desktop.listnodes();
     while (current) {
         //restore the window to its original position
         int originalX = current->x;
         int originalY = current->y;
         //move the window back to its original position
         XMoveWindow(display, current->win, originalX, originalY);
-        if (current != NULL){
+        if (current != nullptr){
     	    getlastfocussed();
         }	
         current = current->next;
@@ -980,7 +1052,7 @@ void changedesktop(int desknum) {
     	return;
     }
 	speedupanimeight();
-    // Move all windows of the current desktop offscreen
+    //move all windows of the current desktop offscreen
     moveWindowsOffscreen(trackmonitor[currentmonitor].desktop[currentdesk]);
     //switch to the selected desktop
     if (desknum >= 1 && desknum <= 8) {
@@ -999,6 +1071,7 @@ void yeetwindow(int desknum) {
 	if (desknum == currentdesk) {return;}
     int originalX = currentfocusedNode->x;
     int originalY = currentfocusedNode->y;
+    std::cout << originalX << originalY << std::endl;
     //move the window offscreen
     XMoveWindow(display, currentfocusedNode->win, originalX, -DISPLAY_HEIGHT);
     Node* movedwindow;
@@ -1043,23 +1116,23 @@ void handleButtonPress(XButtonEvent* event) {
     focusWindow(window);
     if (event->state == MODKEY) {
         if (event->button == Button1) {
-            //initiate dragging if MODKEY is held and left click is used
+            // Initiate dragging if MODKEY is held and left-click is used
             draggingWindow = window;
             dragStartX = event->x_root;
             dragStartY = event->y_root;
             
-            //get the windows current position
+            // Get the window's current position
             XWindowAttributes windowAttrs;
             XGetWindowAttributes(display, window, &windowAttrs);
             winStartX = windowAttrs.x;
             winStartY = windowAttrs.y;
         } else if (event->button == Button3) {
-            //initiate dragging if MODKEY is held and left click is used
+            // Initiate dragging if MODKEY is held and left-click is used
             rezizeWindow = window;
             zizeStartX = event->x_root;
             zizeStartY = event->y_root;
 
-            //get the windows current position
+            // Get the window's current position
             XWindowAttributes windowAttrs;
             XGetWindowAttributes(display, window, &windowAttrs);
             winStartX = windowAttrs.x;
@@ -1136,22 +1209,27 @@ void handleMotionNotify(XMotionEvent* event) {
         XSync(display, false);
     }
     int checkmonitor = grabMonitoratmouse(event->x_root, event->y_root);
-    		if (checkmonitor != -1 && checkmonitor != currentmonitor) {
-    		currentmonitor = checkmonitor;
+  		if (checkmonitor != -1 && checkmonitor != currentmonitor) {
+			currentmonitor = checkmonitor;
 		    currentdesk = trackmonitor[currentmonitor].lastdesktop;
 		    DISPLAY_WIDTH = trackmonitor[checkmonitor].width;
 		    DISPLAY_HEIGHT = trackmonitor[checkmonitor].height;
 		    getlastfocussed();
-		    currentfocusedNode = trackmonitor[currentmonitor].desktop[currentdesk].find(focusedWindow);
+		    //currentfocusedNode = trackmonitor[currentmonitor].desktop[currentdesk].find(focusedWindow);
 	}
 }
 
 void getlastfocussed() {
 	Node* temphead = trackmonitor[currentmonitor].desktop[currentdesk].getHead();
 	Node* temp = temphead;
+	if (temphead==nullptr) {
+		currentfocusedNode = nullptr;
+		focusedWindow = None;
+	}
 	while (temp!=nullptr) {
 		if (temp->isfocussed == 1) {
 			focusWindow(temp->win);
+			currentfocusedNode = temp;
 			break;
 		}
 		else {temp=temp->next;}
@@ -1196,7 +1274,7 @@ void handleConfigureRequest(XConfigureRequestEvent* event) {
 }
 
 void focusWindow(Window window) {
-	if (window!=None) {	
+	if (window!=None && trackmonitor[currentmonitor].desktop[currentdesk].find(window)!=None) {	
 	    XRaiseWindow(display, window);
 	    if (trackmonitor[currentmonitor].desktop[currentdesk].find(focusedWindow)) {
 	    	currentfocusedNode->isfocussed = 0;
@@ -1223,16 +1301,22 @@ void closeWindow(Window window) {
     event.xclient.data.l[1] = CurrentTime;
     XSendEvent(display, window, False, NoEventMask, &event);
     XSync(display, false);
-    //kill window from linked list
-    trackmonitor[currentmonitor].desktop[currentdesk].remove(window);
-    //focus another window
-    Node* headNode = trackmonitor[currentmonitor].desktop[currentdesk].getHead();  //grab some head
-    if (headNode) {
-        focusWindow(headNode->win);  //focus the first window in the list
-    } else {
-        focusedWindow = None;  //uo windows left to focus
+    XWindowAttributes windowAttrs;
+    if (!XGetWindowAttributes(display, window, &windowAttrs) || windowAttrs.override_redirect) { //make sure window is actually destroyed before removing it from the list
+	    //kill window from linked list
+	    trackmonitor[currentmonitor].desktop[currentdesk].remove(window);
+	    //focus another window
+	    Node* headNode = trackmonitor[currentmonitor].desktop[currentdesk].getHead();  //grab some head
+	    if (headNode) {
+	        focusWindow(headNode->win);  //focus the first window in the list
+	    } else {
+	        focusedWindow = None;  //uo windows left to focus
+	    }
+	    if (mode==1) tiling();
     }
-    if (mode==1) tiling();
+    else {
+    	return;
+    }
 }
 
 void handleDestroyRequest(XDestroyWindowEvent* event){
@@ -1240,6 +1324,7 @@ void handleDestroyRequest(XDestroyWindowEvent* event){
     if (event->window != None) {
         trackmonitor[currentmonitor].desktop[currentdesk].remove(event->window);
     }
+
 }
 
 void spawn(void* argz) {
